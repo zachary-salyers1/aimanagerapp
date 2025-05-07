@@ -1,0 +1,89 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Function to check if user owns the project
+    function isProjectOwner(projectId) {
+      // Ensure project exists and ownerId matches request auth uid
+      let projectData = get(/databases/$(database)/documents/projects/$(projectId)).data;
+      return request.auth != null && projectData.ownerId == request.auth.uid;
+    }
+
+    // Projects: Only the owner can CRUD their own projects.
+    match /projects/{projectId} {
+      // Allow create if the user is authenticated and the ownerId matches the user's ID
+      allow create: if request.auth != null && request.resource.data.ownerId == request.auth.uid;
+      
+      // Restore original read/update/delete rule
+      allow read, update, delete: if isProjectOwner(projectId);
+      
+      // Allow listing/querying projects if the user is authenticated
+      // (Relying on the frontend query to correctly filter by ownerId)
+      allow list: if request.auth != null;
+    }
+
+    // Tasks: User can CRUD tasks only if they own the parent project.
+    match /tasks/{taskId} {
+      // Allow create if user owns the project referenced by task's projectId
+      allow create: if isProjectOwner(request.resource.data.projectId);
+      
+      // Allow read, update, delete if user owns the parent project
+      allow read, update, delete: if isProjectOwner(resource.data.projectId);
+    }
+
+    // Documents: User can CRUD documents only if they own the parent project.
+    match /documents/{docId} {
+      // Allow create if user is authenticated and owns the referenced project
+      allow create: if request.auth != null 
+                    && request.resource.data.uploaderId == request.auth.uid 
+                    && isProjectOwner(request.resource.data.projectId);
+      
+      // Allow read if user owns the parent project (or just authenticated? TBD based on usage)
+      allow read: if isProjectOwner(resource.data.projectId);
+      
+      // Allow delete only if user uploaded the document AND owns the project
+      allow delete: if request.auth != null 
+                    && resource.data.uploaderId == request.auth.uid 
+                    && isProjectOwner(resource.data.projectId);
+                    
+      // Updates not typically needed for immutable file metadata, but add if necessary
+      // allow update: ... 
+      
+      // Allow list if querying documents for a project the user owns
+      allow list: if request.auth != null && isProjectOwner(request.query.resource.data.projectId); // Check projectId in query filter
+    }
+
+    // Time Entries: User can CRUD time entries only if they own the parent project.
+    match /timeEntries/{entryId} {
+      // Allow create if user owns the project and the userId matches their own
+      allow create: if request.auth != null 
+                    && request.resource.data.userId == request.auth.uid
+                    && isProjectOwner(request.resource.data.projectId);
+      
+      // Allow read/list if user owns the parent project
+      allow read, list: if isProjectOwner(resource.data.projectId);
+      
+      // Allow update/delete only if the user created the entry AND owns the project
+      allow update, delete: if request.auth != null 
+                            && resource.data.userId == request.auth.uid
+                            && isProjectOwner(resource.data.projectId);
+    }
+
+    // Expenses: User can CRUD expenses only if they own the parent project.
+    match /expenses/{expenseId} {
+       // Allow create if user owns the project and the userId matches their own
+      allow create: if request.auth != null 
+                    && request.resource.data.userId == request.auth.uid // Assuming we add userId
+                    && isProjectOwner(request.resource.data.projectId);
+      
+      // Allow read/list if user owns the parent project
+      allow read, list: if isProjectOwner(resource.data.projectId);
+      
+      // Allow update/delete only if the user created the entry AND owns the project
+      allow update, delete: if request.auth != null 
+                            && resource.data.userId == request.auth.uid // Assuming we add userId
+                            && isProjectOwner(resource.data.projectId);
+    }
+  }
+} 

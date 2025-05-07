@@ -1,0 +1,25 @@
+rules_version = '2';
+
+// Allow access to the Firebase Storage service
+service firebase.storage {
+  // Match the default bucket for your project
+  match /b/{bucket}/o {
+    
+    // Match files stored under a specific project folder structure
+    // Assumes path like: /projects/{projectId}/tasks/{taskId}/filename.ext 
+    // or /projects/{projectId}/receipts/filename.ext etc.
+    match /projects/{projectId}/{allPaths=**} {
+      
+      // Allow read access to any authenticated user
+      // You could restrict this further based on task assignment, etc.
+      allow read: if request.auth != null;
+      
+      // Use correct firestore.get() syntax
+      allow write: if request.auth != null && 
+                   firestore.get(/databases/(default)/documents/projects/$(projectId)).data.ownerId == request.auth.uid;
+    }
+    
+    // Optional: Add rules for other paths if necessary (e.g., user profile pictures)
+    // match /users/{userId}/profile.jpg { ... }
+  }
+} 
