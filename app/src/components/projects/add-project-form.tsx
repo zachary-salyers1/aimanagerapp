@@ -64,16 +64,20 @@ export function AddProjectForm(): React.ReactElement {
 
     try {
       const projectsCollection = collection(db, 'projects');
-      await addDoc(projectsCollection, {
+      const projectRef = await addDoc(projectsCollection, {
         ...values,
         ownerId: user.uid,
         createdAt: serverTimestamp(),
-        // driveFolderId will be added later via Cloud Function
+        // driveFolderId will be added by the onDocumentCreated Cloud Function
       });
-      console.log("Project created successfully!");
+      console.log("Project created successfully with ID:", projectRef.id);
+      // The onDocumentCreated Cloud Function will now handle Drive folder creation
+      // and updating the project document with the driveFolderId.
+
       form.reset(); // Reset form fields
       setIsOpen(false); // Close dialog on success
     } catch (err: any) {
+      // Error handling for Firestore addDoc operation
       console.error("Error creating project:", err);
       setError(err.message || "Failed to create project. Please try again.");
     } finally {
